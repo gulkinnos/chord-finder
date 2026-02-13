@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chord Finder</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .search-section {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        input {
+            flex: 1;
+            padding: 14px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        button {
+            padding: 14px 28px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            background: transparent;
+            color: #666;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .content-section {
+            display: none;
+        }
+
+        .content-section.active {
+            display: block;
+        }
+
+        .results {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .song-card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+
+        .song-card:hover {
+            border-color: #667eea;
+            transform: translateX(5px);
+        }
+
+        .song-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .song-artist {
+            color: #666;
+            font-size: 1rem;
+        }
+
+        .song-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 14px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-small:hover {
+            background: #5568d3;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .chord-display {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            line-height: 1.8;
+            font-size: 14px;
+        }
+
+        .chord-line {
+            color: #667eea;
+            font-weight: 700;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .share-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .share-modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .modal-header {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+        }
+
+        .share-link {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 15px 0;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 14px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .saved-badge {
+            display: inline-block;
+            background: #28a745;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎸 Chord Finder</h1>
+            <p class="subtitle">Find guitar chords for any song, including Russian tracks</p>
+        </header>
+
+        <div class="search-section">
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Search for a song (e.g., 'Кино - Группа крови' or 'Wonderwall')">
+                <button id="searchBtn">Search</button>
+            </div>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="search">Search Results</button>
+                <button class="tab" data-tab="saved">Saved Songs</button>
+            </div>
+
+            <div id="searchContent" class="content-section active">
+                <div id="searchResults"></div>
+            </div>
+
+            <div id="savedContent" class="content-section">
+                <div id="savedSongs"></div>
+            </div>
+        </div>
+
+        <div id="chordDisplay" style="display: none;"></div>
+    </div>
+
+    <div id="shareModal" class="share-modal">
+        <div class="modal-content">
+            <div class="modal-header">Share Song</div>
+            <p>Share this link with others:</p>
+            <div class="share-link" id="shareLink"></div>
+            <div class="modal-actions">
+                <button id="copyLinkBtn" class="btn-small">Copy Link</button>
+                <button id="closeModalBtn" class="btn-small btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const searchResults = document.getElementById('searchResults');
+        const savedSongs = document.getElementById('savedSongs');
+        const chordDisplay = document.getElementById('chordDisplay');
+        const shareModal = document.getElementById('shareModal');
+        const shareLink = document.getElementById('shareLink');
+
+        let currentSongs = [];
+        let saved = JSON.parse(localStorage.getItem('savedSongs') || '[]');
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.content-section').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab + 'Content').classList.add('active');
+                
+                if (tab.dataset.tab === 'saved') {
+                    renderSavedSongs();
+                }
+            });
+        });
+
+        // Search functionality
+        searchBtn.addEventListener('click', searchSongs);
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') searchSongs();
+        });
+
+        async function searchSongs() {
+            const query = searchInput.value.trim();
+            if (!query) return;
+
+            searchResults.innerHTML = '<div class="loading"><div class="spinner"></div>Searching for chords...</div>';
+            searchBtn.disabled = true;
+
+            try {
+                // Use a CORS proxy to fetch chord sites
+                const corsProxy = 'https://api.allorigins.win/raw?url=';
+                
+                // Detect if query contains Cyrillic
+                const isCyrillic = /[а-яА-ЯЁё]/.test(query);
+                
+                currentSongs = [];
+                
+                if (isCyrillic) {
+                    // Try to fetch from Amdm.ru
+                    try {
+                        const searchUrl = `https://amdm.ru/search/?q=${encodeURIComponent(query)}`;
+                        const response = await fetch(corsProxy + encodeURIComponent(searchUrl));
+                        const html = await response.text();
+                        
+                        // Parse search results from HTML
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
+                        const results = doc.querySelectorAll('.item_list');
+                        
+                        for (let i = 0; i < Math.min(5, results.length); i++) {
+                            const titleEl = results[i].querySelector('h3 a, .title a');
+                            const artistEl = results[i].querySelector('.artist, .autor');
+                            
+                            if (titleEl) {
+                                currentSongs.push({
+                                    title: titleEl.textContent.trim(),
+                                    artist: artistEl ? artistEl.textContent.trim() : 'Unknown Artist',
+                                    source: titleEl.href.startsWith('http') ? titleEl.href : 'https://amdm.ru' + titleEl.getAttribute('href'),
+                                    preview: 'Click to view full chords'
+                                });
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Amdm fetch error:', e);
+                    }
+                    
+                    // Fallback: add direct search links
+                    if (currentSongs.length === 0) {
+                        currentSongs.push({
+                            title: query,
+                            artist: 'Manual Search',
+                            source: `https://amdm.ru/search/?q=${encodeURIComponent(query)}`,
+                            preview: 'Click to search manually',
+                            isManual: true
+                        });
+                    }
+                } else {
+                    // For English songs, provide direct links (Ultimate Guitar blocks CORS)
+                    currentSongs.push({
+                        title: query,
+                        artist: 'Search on Ultimate-Guitar',
+                        source: `https://www.ultimate-guitar.com/search.php?search_type=title&value=${encodeURIComponent(query)}`,
+                        preview: 'Click to view chords on Ultimate Guitar',
+                        isManual: true
+                    });
+                    currentSongs.push({
+                        title: query,
+                        artist: 'Search on Chordify',
+                        source: `https://chordify.net/search/${encodeURIComponent(query)}`,
+                        preview: 'Click to view chords on Chordify',
+                        isManual: true
+                    });
+                }
+
+                renderSearchResults();
+
+            } catch (error) {
+                console.error('Search error:', error);
+                searchResults.innerHTML = '<div class="empty-state"><p>Error searching. Please try again.</p></div>';
+            } finally {
+                searchBtn.disabled = false;
+            }
+        }
+
+        function renderSearchResults() {
+            if (currentSongs.length === 0) {
+                searchResults.innerHTML = '<div class="empty-state"><p>No results found. Try another search!</p></div>';
+                return;
+            }
+
+            searchResults.innerHTML = currentSongs.map((song, index) => `
+                <div class="song-card" onclick="viewChords(${index})">
+                    <div class="song-title">
+                        ${song.title}
+                        ${isSaved(song) ? '<span class="saved-badge">Saved</span>' : ''}
+                    </div>
+                    <div class="song-artist">${song.artist}</div>
+                    <div class="song-actions" onclick="event.stopPropagation()">
+                        <button class="btn-small" onclick="saveSong(${index})">
+                            ${isSaved(song) ? '✓ Saved' : 'Save'}
+                        </button>
+                        <button class="btn-small btn-secondary" onclick="shareSong(${index})">Share</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderSavedSongs() {
+            if (saved.length === 0) {
+                savedSongs.innerHTML = '<div class="empty-state"><p>No saved songs yet. Save some from search results!</p></div>';
+                return;
+            }
+
+            savedSongs.innerHTML = saved.map((song, index) => `
+                <div class="song-card" onclick="viewSavedChords(${index})">
+                    <div class="song-title">${song.title}</div>
+                    <div class="song-artist">${song.artist}</div>
+                    <div class="song-actions" onclick="event.stopPropagation()">
+                        <button class="btn-small btn-secondary" onclick="removeSong(${index})">Remove</button>
+                        <button class="btn-small btn-secondary" onclick="shareSavedSong(${index})">Share</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function viewChords(index) {
+            const song = currentSongs[index];
+            
+            // If it's a manual search link, just open it
+            if (song.isManual) {
+                window.open(song.source, '_blank');
+                return;
+            }
+            
+            chordDisplay.style.display = 'block';
+            chordDisplay.innerHTML = '<div class="loading"><div class="spinner"></div>Loading chords...</div>';
+            
+            try {
+                const corsProxy = 'https://api.allorigins.win/raw?url=';
+                const response = await fetch(corsProxy + encodeURIComponent(song.source));
+                const html = await response.text();
+                
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                // Try to extract chord content (works for Amdm.ru and similar sites)
+                let chordContent = '';
+                
+                // Look for common chord display elements
+                const chordElements = doc.querySelectorAll('pre, .chord_text, .song-text, .tablature, .chord-content');
+                
+                if (chordElements.length > 0) {
+                    chordContent = chordElements[0].textContent;
+                } else {
+                    // Fallback: try to find any pre-formatted text
+                    const preElements = doc.querySelectorAll('pre');
+                    if (preElements.length > 0) {
+                        chordContent = preElements[0].textContent;
+                    } else {
+                        chordContent = 'Could not extract chords. Click the link below to view on the original site.';
+                    }
+                }
+                
+                chordDisplay.innerHTML = `
+                    <h2>${song.title} - ${song.artist}</h2>
+                    <p style="color: #666; margin-bottom: 20px;">
+                        Source: <a href="${song.source}" target="_blank" style="color: #667eea;">View on original site →</a>
+                    </p>
+                    <div style="white-space: pre-wrap; font-family: 'Courier New', monospace; line-height: 1.6;">${chordContent}</div>
+                `;
+                
+            } catch (error) {
+                console.error('Fetch error:', error);
+                chordDisplay.innerHTML = `
+                    <h2>${song.title} - ${song.artist}</h2>
+                    <p style="margin-bottom: 20px;">
+                        <a href="${song.source}" target="_blank" style="color: #667eea; font-size: 1.1rem;">Open on original site to view chords →</a>
+                    </p>
+                    <p style="color: #666;">Unable to load chords directly. The site may be blocking access.</p>
+                `;
+            }
+        }
+
+        async function viewSavedChords(index) {
+            const song = saved[index];
+            
+            if (song.isManual) {
+                window.open(song.source, '_blank');
+                return;
+            }
+            
+            chordDisplay.style.display = 'block';
+            chordDisplay.innerHTML = '<div class="loading"><div class="spinner"></div>Loading chords...</div>';
+            
+            try {
+                const corsProxy = 'https://api.allorigins.win/raw?url=';
+                const response = await fetch(corsProxy + encodeURIComponent(song.source));
+                const html = await response.text();
+                
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                let chordContent = '';
+                const chordElements = doc.querySelectorAll('pre, .chord_text, .song-text, .tablature, .chord-content');
+                
+                if (chordElements.length > 0) {
+                    chordContent = chordElements[0].textContent;
+                } else {
+                    const preElements = doc.querySelectorAll('pre');
+                    if (preElements.length > 0) {
+                        chordContent = preElements[0].textContent;
+                    } else {
+                        chordContent = 'Could not extract chords. Click the link below to view on the original site.';
+                    }
+                }
+                
+                chordDisplay.innerHTML = `
+                    <h2>${song.title} - ${song.artist}</h2>
+                    <p style="color: #666; margin-bottom: 20px;">
+                        Source: <a href="${song.source}" target="_blank" style="color: #667eea;">View on original site →</a>
+                    </p>
+                    <div style="white-space: pre-wrap; font-family: 'Courier New', monospace; line-height: 1.6;">${chordContent}</div>
+                `;
+                
+            } catch (error) {
+                console.error('Fetch error:', error);
+                chordDisplay.innerHTML = `
+                    <h2>${song.title} - ${song.artist}</h2>
+                    <p style="margin-bottom: 20px;">
+                        <a href="${song.source}" target="_blank" style="color: #667eea; font-size: 1.1rem;">Open on original site to view chords →</a>
+                    </p>
+                    <p style="color: #666;">Unable to load chords directly. The site may be blocking access.</p>
+                `;
+            }
+        }
+
+        function saveSong(index) {
+            const song = currentSongs[index];
+            if (!isSaved(song)) {
+                saved.push(song);
+                localStorage.setItem('savedSongs', JSON.stringify(saved));
+                renderSearchResults();
+            }
+        }
+
+        function removeSong(index) {
+            saved.splice(index, 1);
+            localStorage.setItem('savedSongs', JSON.stringify(saved));
+            renderSavedSongs();
+        }
+
+        function isSaved(song) {
+            return saved.some(s => s.title === song.title && s.artist === song.artist);
+        }
+
+        function shareSong(index) {
+            const song = currentSongs[index];
+            showShareModal(song);
+        }
+
+        function shareSavedSong(index) {
+            const song = saved[index];
+            showShareModal(song);
+        }
+
+        function showShareModal(song) {
+            const shareData = encodeURIComponent(JSON.stringify(song));
+            const url = `${window.location.origin}${window.location.pathname}?song=${shareData}`;
+            shareLink.textContent = url;
+            shareModal.classList.add('active');
+        }
+
+        document.getElementById('copyLinkBtn').addEventListener('click', () => {
+            navigator.clipboard.writeText(shareLink.textContent);
+            document.getElementById('copyLinkBtn').textContent = 'Copied!';
+            setTimeout(() => {
+                document.getElementById('copyLinkBtn').textContent = 'Copy Link';
+            }, 2000);
+        });
+
+        document.getElementById('closeModalBtn').addEventListener('click', () => {
+            shareModal.classList.remove('active');
+        });
+
+        // Load shared song from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const sharedSong = urlParams.get('song');
+        if (sharedSong) {
+            try {
+                const song = JSON.parse(decodeURIComponent(sharedSong));
+                currentSongs = [song];
+                renderSearchResults();
+                viewChords(0);
+            } catch (e) {
+                console.error('Error loading shared song:', e);
+            }
+        }
+
+        // Initial render
+        searchResults.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15"/><path d="M7 10L12 15L17 10"/><path d="M12 15V3"/></svg><h3>Search for any song</h3><p>Enter a song name above to find guitar chords</p></div>';
+    </script>
+</body>
+</html>
