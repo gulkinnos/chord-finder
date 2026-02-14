@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chord Finder</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container { max-width: 900px; margin: 0 auto; }
+
+        header { text-align: center; color: white; margin-bottom: 30px; }
+        h1 { font-size: 2.5rem; margin-bottom: 8px; font-weight: 700; }
+        .subtitle { opacity: 0.9; font-size: 1.1rem; }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .search-box { display: flex; gap: 12px; margin-bottom: 20px; }
+
+        input[type="text"], textarea {
+            flex: 1;
+            padding: 14px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 16px;
+            font-family: inherit;
+            transition: all 0.3s;
+        }
+
+        input[type="text"]:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        textarea { resize: vertical; min-height: 100px; width: 100%; }
+
+        .btn {
+            padding: 14px 28px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4); }
+        .btn:active { transform: translateY(0); }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 14px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+        .btn-small:hover { background: #5568d3; }
+
+        .btn-save { background: #28a745; }
+        .btn-save:hover { background: #218838; }
+
+        .btn-danger { background: #dc3545; }
+        .btn-danger:hover { background: #c82333; }
+
+        .btn-secondary { background: #6c757d; }
+        .btn-secondary:hover { background: #5a6268; }
+
+        .btn-whatsapp { background: #25D366; }
+        .btn-whatsapp:hover { background: #1da851; }
+
+        .btn-telegram { background: #0088cc; }
+        .btn-telegram:hover { background: #006da3; }
+
+        .tabs { display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; }
+
+        .tab {
+            padding: 10px 20px;
+            background: transparent;
+            color: #666;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 15px;
+            transition: all 0.3s;
+        }
+        .tab.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+
+        .content-section { display: none; }
+        .content-section.active { display: block; }
+
+        .song-card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 12px;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+        .song-card:hover { border-color: #667eea; transform: translateX(4px); }
+
+        .song-card-header { cursor: pointer; }
+        .song-title { font-size: 1.2rem; font-weight: 700; color: #333; margin-bottom: 4px; }
+        .song-artist { color: #666; font-size: 0.95rem; }
+        .song-meta { color: #999; font-size: 0.8rem; margin-top: 4px; }
+
+        .song-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+        .badge-saved { background: #d4edda; color: #155724; }
+
+        .chord-viewer {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .chord-content {
+            white-space: pre-wrap;
+            font-family: 'Courier New', Courier, monospace;
+            line-height: 1.7;
+            font-size: 14px;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+
+        .chord-viewer h2 { margin-bottom: 4px; }
+        .chord-viewer .meta { color: #666; margin-bottom: 16px; font-size: 0.9rem; }
+
+        .notes-section {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #eee;
+        }
+        .notes-section h4 { margin-bottom: 8px; color: #555; }
+        .notes-text { color: #666; line-height: 1.6; white-space: pre-wrap; }
+
+        /* Edit form */
+        .edit-form { display: flex; flex-direction: column; gap: 16px; }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group label { font-weight: 600; color: #555; font-size: 14px; }
+        .form-row { display: flex; gap: 12px; }
+        .form-row .form-group { flex: 1; }
+        .edit-chord-content {
+            font-family: 'Courier New', Courier, monospace;
+            min-height: 300px;
+            line-height: 1.7;
+            font-size: 14px;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none; align-items: center; justify-content: center;
+            z-index: 1000;
+        }
+        .modal-overlay.active { display: flex; }
+
+        .modal {
+            background: white;
+            border-radius: 16px;
+            padding: 28px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal h3 { font-size: 1.4rem; margin-bottom: 16px; }
+
+        .share-url-box {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 13px;
+            margin: 12px 0;
+            border: 1px solid #e0e0e0;
+        }
+
+        .share-buttons { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+        .share-buttons .row { display: flex; gap: 10px; }
+
+        .loading { text-align: center; padding: 40px; color: #666; }
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px; height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .empty-state { text-align: center; padding: 50px 20px; color: #999; }
+        .empty-state h3 { margin-bottom: 8px; color: #777; }
+
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: white;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 16px;
+            transition: background 0.2s;
+        }
+        .back-btn:hover { background: rgba(255,255,255,0.3); }
+
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: #333;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 2000;
+            transition: transform 0.3s ease;
+        }
+        .toast.show { transform: translateX(-50%) translateY(0); }
+
+        @media (max-width: 600px) {
+            h1 { font-size: 1.8rem; }
+            .search-box { flex-direction: column; }
+            .btn { width: 100%; }
+            .form-row { flex-direction: column; }
+            .song-actions { flex-direction: column; }
+            .song-actions .btn-small { width: 100%; text-align: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="app"></div>
+    <div class="modal-overlay" id="shareModal">
+        <div class="modal">
+            <h3>Share Song</h3>
+            <p>Share this song with your friends:</p>
+            <div class="share-url-box" id="shareUrl"></div>
+            <div class="share-buttons">
+                <div class="row">
+                    <button class="btn-small" id="copyLinkBtn" style="flex:1">Copy Link</button>
+                    <button class="btn-small btn-secondary" id="closeModalBtn" style="flex:1">Close</button>
+                </div>
+                <div class="row">
+                    <button class="btn-small btn-whatsapp" id="shareWhatsApp" style="flex:1">WhatsApp</button>
+                    <button class="btn-small btn-telegram" id="shareTelegram" style="flex:1">Telegram</button>
+                </div>
+                <button class="btn-small" id="shareNative" style="background:#333">Share via...</button>
+            </div>
+        </div>
+    </div>
+    <div class="toast" id="toast"></div>
+
+    <script>
+    const API = '/api';
+    let currentView = 'main'; // main | view | edit | shared
+    let currentTab = 'search';
+    let searchResults = [];
+    let savedSongs = [];
+    let viewingSong = null;
+
+    // --- Routing ---
+    function initRouter() {
+        const path = window.location.pathname;
+        const shareMatch = path.match(/^\/share\/(.+)$/);
+        if (shareMatch) {
+            loadSharedSong(shareMatch[1]);
+        } else {
+            renderMain();
+            loadSavedSongs();
+        }
+    }
+
+    // --- API calls ---
+    async function apiSearch(query) {
+        const res = await fetch(`${API}/search?q=${encodeURIComponent(query)}`);
+        return res.json();
+    }
+
+    async function apiFetchChords(url) {
+        const res = await fetch(`${API}/chords?url=${encodeURIComponent(url)}`);
+        return res.json();
+    }
+
+    async function apiGetSongs() {
+        const res = await fetch(`${API}/songs`);
+        return res.json();
+    }
+
+    async function apiSaveSong(data) {
+        const res = await fetch(`${API}/songs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        return res.json();
+    }
+
+    async function apiUpdateSong(id, data) {
+        const res = await fetch(`${API}/songs/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        return res.json();
+    }
+
+    async function apiDeleteSong(id) {
+        await fetch(`${API}/songs/${id}`, { method: 'DELETE' });
+    }
+
+    async function apiGetShared(shareId) {
+        const res = await fetch(`${API}/share/${shareId}`);
+        if (!res.ok) return null;
+        return res.json();
+    }
+
+    // --- Toast ---
+    function showToast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 2500);
+    }
+
+    // --- Render: Main view ---
+    function renderMain() {
+        currentView = 'main';
+        const app = document.getElementById('app');
+        app.innerHTML = `
+            <header>
+                <h1>Chord Finder</h1>
+                <p class="subtitle">Search guitar chords, save and share with friends</p>
+            </header>
+            <div class="card">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="Search for a song (e.g., 'Wonderwall' or 'Кино Группа крови')">
+                    <button class="btn" id="searchBtn">Search</button>
+                </div>
+                <div class="tabs">
+                    <button class="tab ${currentTab === 'search' ? 'active' : ''}" data-tab="search">Search Results</button>
+                    <button class="tab ${currentTab === 'saved' ? 'active' : ''}" data-tab="saved">Saved Songs</button>
+                </div>
+                <div id="searchContent" class="content-section ${currentTab === 'search' ? 'active' : ''}">
+                    <div id="searchResults">
+                        <div class="empty-state">
+                            <h3>Search for any song</h3>
+                            <p>Enter a song name above to find guitar chords</p>
+                        </div>
+                    </div>
+                </div>
+                <div id="savedContent" class="content-section ${currentTab === 'saved' ? 'active' : ''}">
+                    <div id="savedSongs"></div>
+                </div>
+            </div>
+        `;
+
+        // Event listeners
+        document.getElementById('searchBtn').addEventListener('click', doSearch);
+        document.getElementById('searchInput').addEventListener('keypress', e => {
+            if (e.key === 'Enter') doSearch();
+        });
+
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                currentTab = tab.dataset.tab;
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.content-section').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab + 'Content').classList.add('active');
+                if (currentTab === 'saved') renderSavedSongsList();
+            });
+        });
+
+        if (searchResults.length > 0) renderSearchResults();
+        if (currentTab === 'saved') renderSavedSongsList();
+    }
+
+    async function doSearch() {
+        const input = document.getElementById('searchInput');
+        const query = input.value.trim();
+        if (!query) return;
+
+        const container = document.getElementById('searchResults');
+        container.innerHTML = '<div class="loading"><div class="spinner"></div>Searching for chords...</div>';
+        document.getElementById('searchBtn').disabled = true;
+
+        try {
+            searchResults = await apiSearch(query);
+            renderSearchResults();
+        } catch (err) {
+            container.innerHTML = '<div class="empty-state"><p>Search failed. Please try again.</p></div>';
+        } finally {
+            document.getElementById('searchBtn').disabled = false;
+        }
+    }
+
+    function renderSearchResults() {
+        const container = document.getElementById('searchResults');
+        if (!container) return;
+
+        if (searchResults.length === 0) {
+            container.innerHTML = '<div class="empty-state"><p>No results found. Try a different search.</p></div>';
+            return;
+        }
+
+        container.innerHTML = searchResults.map((song, i) => {
+            const isSaved = savedSongs.some(s => s.title === song.title && s.artist === song.artist);
+            return `
+                <div class="song-card">
+                    <div class="song-card-header" onclick="viewSearchResult(${i})">
+                        <div class="song-title">
+                            ${escapeHtml(song.title)}
+                            ${isSaved ? '<span class="badge badge-saved">Saved</span>' : ''}
+                        </div>
+                        <div class="song-artist">${escapeHtml(song.artist)}</div>
+                    </div>
+                    <div class="song-actions">
+                        <button class="btn-small" onclick="viewSearchResult(${i})">View Chords</button>
+                        <button class="btn-small btn-save" onclick="saveFromSearch(${i})">${isSaved ? 'Saved' : 'Save'}</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // --- View search result chords ---
+    async function viewSearchResult(index) {
+        const song = searchResults[index];
+        if (song.isManual) {
+            window.open(song.sourceUrl, '_blank');
+            return;
+        }
+
+        currentView = 'view';
+        const app = document.getElementById('app');
+        app.innerHTML = `
+            <button class="back-btn" onclick="goBack()">&#8592; Back to search</button>
+            <div class="chord-viewer">
+                <h2>${escapeHtml(song.title)}</h2>
+                <div class="meta">${escapeHtml(song.artist)} &middot; <a href="${escapeHtml(song.sourceUrl)}" target="_blank" style="color:#667eea">Original source</a></div>
+                <div class="loading"><div class="spinner"></div>Loading chords...</div>
+            </div>
+        `;
+
+        try {
+            const data = await apiFetchChords(song.sourceUrl);
+            const viewer = document.querySelector('.chord-viewer');
+            if (data.chordContent) {
+                viewer.innerHTML = `
+                    <h2>${escapeHtml(song.title)}</h2>
+                    <div class="meta">${escapeHtml(song.artist)} &middot; <a href="${escapeHtml(song.sourceUrl)}" target="_blank" style="color:#667eea">Original source</a></div>
+                    <div class="chord-content">${escapeHtml(data.chordContent)}</div>
+                    <div style="margin-top:16px; display:flex; gap:8px; flex-wrap:wrap;">
+                        <button class="btn-small btn-save" onclick="saveFromSearchWithChords(${index}, decodeChordContent())">Save with Chords</button>
+                    </div>
+                `;
+                // Store chord content for saving
+                window._lastChordContent = data.chordContent;
+            } else {
+                viewer.innerHTML = `
+                    <h2>${escapeHtml(song.title)}</h2>
+                    <div class="meta">${escapeHtml(song.artist)}</div>
+                    <p style="color:#666; margin:20px 0;">Could not extract chords automatically.</p>
+                    <a href="${escapeHtml(song.sourceUrl)}" target="_blank" class="btn-small">Open Original Site</a>
+                `;
+            }
+        } catch (err) {
+            document.querySelector('.chord-viewer').innerHTML = `
+                <h2>${escapeHtml(song.title)}</h2>
+                <p style="color:#666;">Failed to load chords. <a href="${escapeHtml(song.sourceUrl)}" target="_blank" style="color:#667eea">View on original site</a></p>
+            `;
+        }
+    }
+    // Make it available globally
+    window.viewSearchResult = viewSearchResult;
+
+    function decodeChordContent() { return window._lastChordContent || ''; }
+    window.decodeChordContent = decodeChordContent;
+
+    // --- Save from search ---
+    async function saveFromSearch(index) {
+        const song = searchResults[index];
+        const isSaved = savedSongs.some(s => s.title === song.title && s.artist === song.artist);
+        if (isSaved) { showToast('Song already saved'); return; }
+
+        try {
+            const saved = await apiSaveSong({
+                title: song.title,
+                artist: song.artist,
+                sourceUrl: song.sourceUrl,
+            });
+            savedSongs.unshift(saved);
+            renderSearchResults();
+            showToast('Song saved!');
+        } catch (err) {
+            showToast('Failed to save');
+        }
+    }
+    window.saveFromSearch = saveFromSearch;
+
+    async function saveFromSearchWithChords(index, chordContent) {
+        const song = searchResults[index];
+        try {
+            const saved = await apiSaveSong({
+                title: song.title,
+                artist: song.artist,
+                sourceUrl: song.sourceUrl,
+                chordContent: window._lastChordContent || '',
+            });
+            savedSongs.unshift(saved);
+            showToast('Song saved with chords!');
+            viewSavedSong(saved.id);
+        } catch (err) {
+            showToast('Failed to save');
+        }
+    }
+    window.saveFromSearchWithChords = saveFromSearchWithChords;
+
+    // --- Saved songs ---
+    async function loadSavedSongs() {
+        try {
+            savedSongs = await apiGetSongs();
+        } catch (err) {
+            savedSongs = [];
+        }
+    }
+
+    function renderSavedSongsList() {
+        const container = document.getElementById('savedSongs');
+        if (!container) return;
+
+        if (savedSongs.length === 0) {
+            container.innerHTML = '<div class="empty-state"><h3>No saved songs</h3><p>Search and save songs to see them here</p></div>';
+            return;
+        }
+
+        container.innerHTML = savedSongs.map(song => `
+            <div class="song-card">
+                <div class="song-card-header" onclick="viewSavedSong(${song.id})">
+                    <div class="song-title">${escapeHtml(song.title)}</div>
+                    <div class="song-artist">${escapeHtml(song.artist)}</div>
+                    <div class="song-meta">Saved ${new Date(song.created_at).toLocaleDateString()}</div>
+                </div>
+                <div class="song-actions">
+                    <button class="btn-small" onclick="viewSavedSong(${song.id})">View</button>
+                    <button class="btn-small" onclick="editSong(${song.id})" style="background:#f0ad4e">Edit</button>
+                    <button class="btn-small btn-secondary" onclick="shareSavedSong(${song.id})">Share</button>
+                    <button class="btn-small btn-danger" onclick="deleteSavedSong(${song.id})">Delete</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // --- View saved song ---
+    async function viewSavedSong(id) {
+        const song = savedSongs.find(s => s.id === id) || await (await fetch(`${API}/songs/${id}`)).json();
+        if (!song) return;
+
+        viewingSong = song;
+        currentView = 'view';
+        const app = document.getElementById('app');
+        app.innerHTML = `
+            <button class="back-btn" onclick="goBack()">&#8592; Back</button>
+            <div class="chord-viewer">
+                <h2>${escapeHtml(song.title)}</h2>
+                <div class="meta">${escapeHtml(song.artist)}
+                    ${song.source_url ? ` &middot; <a href="${escapeHtml(song.source_url)}" target="_blank" style="color:#667eea">Original source</a>` : ''}
+                </div>
+                ${song.chord_content ? `<div class="chord-content">${escapeHtml(song.chord_content)}</div>` : '<p style="color:#888;">No chord content saved. Click Edit to add chords.</p>'}
+                ${song.notes ? `<div class="notes-section"><h4>Notes</h4><div class="notes-text">${escapeHtml(song.notes)}</div></div>` : ''}
+                <div style="margin-top:20px; display:flex; gap:8px; flex-wrap:wrap;">
+                    <button class="btn-small" onclick="editSong(${song.id})" style="background:#f0ad4e">Edit</button>
+                    <button class="btn-small btn-secondary" onclick="shareSavedSong(${song.id})">Share</button>
+                    ${song.source_url && !song.chord_content ? `<button class="btn-small" onclick="fetchAndSaveChords(${song.id})">Fetch Chords</button>` : ''}
+                </div>
+            </div>
+        `;
+    }
+    window.viewSavedSong = viewSavedSong;
+
+    // --- Fetch chords for a saved song ---
+    async function fetchAndSaveChords(id) {
+        const song = savedSongs.find(s => s.id === id);
+        if (!song || !song.source_url) return;
+
+        showToast('Fetching chords...');
+        try {
+            const data = await apiFetchChords(song.source_url);
+            if (data.chordContent) {
+                const updated = await apiUpdateSong(id, { chordContent: data.chordContent });
+                const idx = savedSongs.findIndex(s => s.id === id);
+                if (idx >= 0) savedSongs[idx] = updated;
+                viewSavedSong(id);
+                showToast('Chords fetched and saved!');
+            } else {
+                showToast('Could not extract chords from source');
+            }
+        } catch (err) {
+            showToast('Failed to fetch chords');
+        }
+    }
+    window.fetchAndSaveChords = fetchAndSaveChords;
+
+    // --- Edit song ---
+    async function editSong(id) {
+        const song = savedSongs.find(s => s.id === id) || await (await fetch(`${API}/songs/${id}`)).json();
+        if (!song) return;
+
+        currentView = 'edit';
+        const app = document.getElementById('app');
+        app.innerHTML = `
+            <button class="back-btn" onclick="viewSavedSong(${song.id})">&#8592; Cancel</button>
+            <div class="card">
+                <h2 style="margin-bottom:20px;">Edit Song</h2>
+                <div class="edit-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="editTitle">Title</label>
+                            <input type="text" id="editTitle" value="${escapeAttr(song.title)}">
+                        </div>
+                        <div class="form-group">
+                            <label for="editArtist">Artist</label>
+                            <input type="text" id="editArtist" value="${escapeAttr(song.artist)}">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="editChords">Chords</label>
+                        <textarea id="editChords" class="edit-chord-content" placeholder="Paste or type chord content here...">${escapeHtml(song.chord_content || '')}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="editNotes">Notes (capo, tuning, tips, etc.)</label>
+                        <textarea id="editNotes" style="min-height:80px" placeholder="Add personal notes...">${escapeHtml(song.notes || '')}</textarea>
+                    </div>
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn" onclick="saveEdit(${song.id})">Save Changes</button>
+                        <button class="btn" onclick="viewSavedSong(${song.id})" style="background:#6c757d">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    window.editSong = editSong;
+
+    async function saveEdit(id) {
+        const title = document.getElementById('editTitle').value.trim();
+        const artist = document.getElementById('editArtist').value.trim();
+        const chordContent = document.getElementById('editChords').value;
+        const notes = document.getElementById('editNotes').value;
+
+        if (!title) { showToast('Title is required'); return; }
+
+        try {
+            const updated = await apiUpdateSong(id, { title, artist, chordContent, notes });
+            const idx = savedSongs.findIndex(s => s.id === id);
+            if (idx >= 0) savedSongs[idx] = updated;
+            showToast('Song updated!');
+            viewSavedSong(id);
+        } catch (err) {
+            showToast('Failed to save changes');
+        }
+    }
+    window.saveEdit = saveEdit;
+
+    // --- Delete song ---
+    async function deleteSavedSong(id) {
+        if (!confirm('Delete this song?')) return;
+        try {
+            await apiDeleteSong(id);
+            savedSongs = savedSongs.filter(s => s.id !== id);
+            showToast('Song deleted');
+            if (currentView === 'main') {
+                renderSavedSongsList();
+            } else {
+                goBack();
+            }
+        } catch (err) {
+            showToast('Failed to delete');
+        }
+    }
+    window.deleteSavedSong = deleteSavedSong;
+
+    // --- Sharing ---
+    function shareSavedSong(id) {
+        const song = savedSongs.find(s => s.id === id);
+        if (!song) return;
+
+        const shareUrl = `${window.location.origin}/share/${song.share_id}`;
+        document.getElementById('shareUrl').textContent = shareUrl;
+
+        // WhatsApp
+        document.getElementById('shareWhatsApp').onclick = () => {
+            const text = `Check out the chords for "${song.title}" by ${song.artist}: ${shareUrl}`;
+            window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+        };
+
+        // Telegram
+        document.getElementById('shareTelegram').onclick = () => {
+            const text = `Check out the chords for "${song.title}" by ${song.artist}`;
+            window.open(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(text)}`, '_blank');
+        };
+
+        // Copy link
+        document.getElementById('copyLinkBtn').onclick = () => {
+            navigator.clipboard.writeText(shareUrl).then(() => {
+                document.getElementById('copyLinkBtn').textContent = 'Copied!';
+                setTimeout(() => { document.getElementById('copyLinkBtn').textContent = 'Copy Link'; }, 2000);
+            });
+        };
+
+        // Native share API
+        document.getElementById('shareNative').onclick = () => {
+            if (navigator.share) {
+                navigator.share({
+                    title: `${song.title} - ${song.artist} chords`,
+                    text: `Check out the chords for "${song.title}" by ${song.artist}`,
+                    url: shareUrl,
+                });
+            } else {
+                navigator.clipboard.writeText(shareUrl);
+                showToast('Link copied to clipboard');
+            }
+        };
+
+        document.getElementById('closeModalBtn').onclick = () => {
+            document.getElementById('shareModal').classList.remove('active');
+        };
+
+        document.getElementById('shareModal').classList.add('active');
+    }
+    window.shareSavedSong = shareSavedSong;
+
+    // --- Shared song view ---
+    async function loadSharedSong(shareId) {
+        const app = document.getElementById('app');
+        app.innerHTML = `
+            <header>
+                <h1>Chord Finder</h1>
+                <p class="subtitle">Shared song</p>
+            </header>
+            <div class="card"><div class="loading"><div class="spinner"></div>Loading shared song...</div></div>
+        `;
+
+        const song = await apiGetShared(shareId);
+        if (!song) {
+            app.innerHTML = `
+                <header>
+                    <h1>Chord Finder</h1>
+                </header>
+                <div class="card">
+                    <div class="empty-state">
+                        <h3>Song not found</h3>
+                        <p>This shared link may have expired or been deleted.</p>
+                        <button class="btn" onclick="window.location='/';" style="margin-top:16px;">Go to Chord Finder</button>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        currentView = 'shared';
+        app.innerHTML = `
+            <header>
+                <h1>Chord Finder</h1>
+                <p class="subtitle">Shared song</p>
+            </header>
+            <div class="chord-viewer">
+                <h2>${escapeHtml(song.title)}</h2>
+                <div class="meta">${escapeHtml(song.artist)}
+                    ${song.source_url ? ` &middot; <a href="${escapeHtml(song.source_url)}" target="_blank" style="color:#667eea">Original source</a>` : ''}
+                </div>
+                ${song.chord_content ? `<div class="chord-content">${escapeHtml(song.chord_content)}</div>` : '<p style="color:#888;">No chord content available.</p>'}
+                ${song.notes ? `<div class="notes-section"><h4>Notes</h4><div class="notes-text">${escapeHtml(song.notes)}</div></div>` : ''}
+                <div style="margin-top:20px; display:flex; gap:8px; flex-wrap:wrap;">
+                    <button class="btn" onclick="window.location='/';">Open Chord Finder</button>
+                </div>
+            </div>
+        `;
+    }
+
+    // --- Navigation ---
+    function goBack() {
+        currentView = 'main';
+        renderMain();
+        if (currentTab === 'saved') renderSavedSongsList();
+    }
+    window.goBack = goBack;
+
+    // --- Utilities ---
+    function escapeHtml(str) {
+        if (!str) return '';
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    function escapeAttr(str) {
+        if (!str) return '';
+        return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // --- Init ---
+    initRouter();
+    </script>
+</body>
+</html>
