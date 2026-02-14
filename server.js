@@ -58,18 +58,61 @@ app.get('/api/search', async (req, res) => {
         });
       }
     } else {
-      results.push({
-        title: query,
-        artist: 'Search on Ultimate-Guitar',
-        sourceUrl: `https://www.ultimate-guitar.com/search.php?search_type=title&value=${encodeURIComponent(query)}`,
-        isManual: true,
-      });
-      results.push({
-        title: query,
-        artist: 'Search on Chordify',
-        sourceUrl: `https://chordify.net/search/${encodeURIComponent(query)}`,
-        isManual: true,
-      });
+      // Try to scrape Ultimate Guitar search results
+      try {
+        const ugSearchUrl = `https://www.ultimate-guitar.com/search.php?search_type=title&value=${encodeURIComponent(query)}`;
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(ugSearchUrl)}`;
+        const response = await fetch(proxyUrl);
+
+        if (response.ok) {
+          const html = await response.text();
+          // UG embeds search results as JSON in a data-content attribute
+          const storeMatch = html.match(/class="js-store"\s+data-content="([^"]+)"/);
+          if (storeMatch) {
+            const jsonStr = storeMatch[1]
+              .replace(/&quot;/g, '"')
+              .replace(/&amp;/g, '&')
+              .replace(/&lt;/g, '<')
+              .replace(/&gt;/g, '>')
+              .replace(/&#039;/g, "'");
+            const storeData = JSON.parse(jsonStr);
+            const searchData = storeData?.store?.page?.data?.results || [];
+
+            // Filter for chord-type results and sort by rating
+            const chordResults = searchData
+              .filter(item => item && item.tab_url && item.type === 'Chords')
+              .sort((a, b) => (b.rating || 0) - (a.rating || 0));
+
+            for (const item of chordResults) {
+              if (results.length >= 10) break;
+              results.push({
+                title: item.song_name || query,
+                artist: item.artist_name || 'Unknown Artist',
+                sourceUrl: item.tab_url,
+                isManual: false,
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error('English search scrape error:', err.message);
+      }
+
+      // Fallback to manual links if scraping didn't yield results
+      if (results.length === 0) {
+        results.push({
+          title: query,
+          artist: 'Search on Ultimate-Guitar',
+          sourceUrl: `https://www.ultimate-guitar.com/search.php?search_type=title&value=${encodeURIComponent(query)}`,
+          isManual: true,
+        });
+        results.push({
+          title: query,
+          artist: 'Search on Chordify',
+          sourceUrl: `https://chordify.net/search/${encodeURIComponent(query)}`,
+          isManual: true,
+        });
+      }
     }
 
     res.json(results);
@@ -114,6 +157,33 @@ app.get('/api/chords', async (req, res) => {
       const songTextMatch = html.match(/class="[^"]*song[_-]?text[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
       if (songTextMatch) {
         chordContent = songTextMatch[1].replace(/<[^>]+>/g, '').trim();
+      }
+    }
+
+    // Try Ultimate Guitar format (JSON embedded in data-content attribute)
+    if (!chordContent) {
+      const storeMatch = html.match(/class="js-store"\s+data-content="([^"]+)"/);
+      if (storeMatch) {
+        try {
+          const jsonStr = storeMatch[1]
+            .replace(/&quot;/g, '"')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&#039;/g, "'");
+          const storeData = JSON.parse(jsonStr);
+          const content = storeData?.store?.page?.data?.tab_view?.wiki_tab?.content;
+          if (content) {
+            chordContent = content
+              .replace(/\[ch\](.*?)\[\/ch\]/g, '$1')
+              .replace(/\[tab\]/g, '')
+              .replace(/\[\/tab\]/g, '')
+              .replace(/\r\n/g, '\n')
+              .trim();
+          }
+        } catch (e) {
+          // JSON parse failed, continue
+        }
       }
     }
 
