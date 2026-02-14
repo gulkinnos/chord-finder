@@ -1,263 +1,453 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const db = require('./db/database');
+const axios = require('axios');
+const cheerio = require('cheerio');
+const { songOperations } = require('./db/database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static('public'));
 
-// --- API Routes ---
+// Helper function to detect Cyrillic characters
+function hasCyrillic(text) {
+  return /[\u0400-\u04FF]/.test(text);
+}
 
-// Search for chords online (proxy to avoid CORS issues)
-app.get('/api/search', async (req, res) => {
-  const query = req.query.q;
-  if (!query) return res.status(400).json({ error: 'Query parameter "q" is required' });
-
+// Helper function to scrape Ultimate Guitar
+async function scrapeUltimateGuitar(query) {
   try {
-    const isCyrillic = /[а-яА-ЯЁё]/.test(query);
+    const searchUrl = `https://www.ultimate-guitar.com/search.php?search_type=title&value=${encodeURIComponent(query)}`;
+    const response = await axios.get(searchUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      },
+      timeout: 10000
+    });
+
+    const $ = cheerio.load(response.data);
     const results = [];
 
-    if (isCyrillic) {
-      const searchUrl = `https://amdm.ru/search/?q=${encodeURIComponent(query)}`;
-      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(searchUrl)}`;
-      const response = await fetch(proxyUrl);
-
-      if (response.ok) {
-        const html = await response.text();
-        // Extract song links from amdm.ru search results
-        const itemRegex = /<a[^>]*href="(\/akkordy[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
-        let match;
-        const seen = new Set();
-
-        while ((match = itemRegex.exec(html)) !== null && results.length < 10) {
-          const href = match[1];
-          const text = match[2].replace(/<[^>]+>/g, '').trim();
-          if (text && !seen.has(href) && href.includes('/akkordy/')) {
-            seen.add(href);
-            const parts = text.split(/\s*[-–—]\s*/);
-            results.push({
-              title: parts.length > 1 ? parts.slice(1).join(' - ') : text,
-              artist: parts.length > 1 ? parts[0] : 'Unknown Artist',
-              sourceUrl: `https://amdm.ru${href}`,
-              isManual: false,
-            });
-          }
-        }
-      }
-
-      if (results.length === 0) {
+    // Parse search results
+    $('article.dNNhl').each((i, element) => {
+      if (i >= 10) return false; // Limit to 10 results
+      
+      const $el = $(element);
+      const title = $el.find('a.fZjdD').text().trim();
+      const artist = $el.find('a.c5K8n').text().trim();
+      const url = $el.find('a.fZjdD').attr('href');
+      const type = $el.find('.tdi3Y').text().trim();
+      
+      if (title && artist && url) {
         results.push({
-          title: query,
-          artist: 'Search on Amdm.ru',
-          sourceUrl: `https://amdm.ru/search/?q=${encodeURIComponent(query)}`,
-          isManual: true,
+          title,
+          artist,
+          url: url.startsWith('http') ? url : `https://www.ultimate-guitar.com${url}`,
+          type: type || 'Chords',
+          source: 'Ultimate Guitar'
         });
       }
-    } else {
-      // Try to scrape Ultimate Guitar search results
-      try {
-        const ugSearchUrl = `https://www.ultimate-guitar.com/search.php?search_type=title&value=${encodeURIComponent(query)}`;
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(ugSearchUrl)}`;
-        const response = await fetch(proxyUrl);
+    });
 
-        if (response.ok) {
-          const html = await response.text();
-          // UG embeds search results as JSON in a data-content attribute
-          const storeMatch = html.match(/class="js-store"\s+data-content="([^"]+)"/);
-          if (storeMatch) {
-            const jsonStr = storeMatch[1]
-              .replace(/&quot;/g, '"')
-              .replace(/&amp;/g, '&')
-              .replace(/&lt;/g, '<')
-              .replace(/&gt;/g, '>')
-              .replace(/&#039;/g, "'");
-            const storeData = JSON.parse(jsonStr);
-            const searchData = storeData?.store?.page?.data?.results || [];
+    return results;
+  } catch (error) {
+    console.error('Ultimate Guitar scraping error:', error.message);
+    return [];
+  }
+}
 
-            // Filter for chord-type results and sort by rating
-            const chordResults = searchData
-              .filter(item => item && item.tab_url && item.type === 'Chords')
-              .sort((a, b) => (b.rating || 0) - (a.rating || 0));
+// Helper function to scrape Russian chord site (amdm.ru)
+async function scrapeAmdmRu(query) {
+  try {
+    const searchUrl = `https://amdm.ru/search/?q=${encodeURIComponent(query)}`;
+    const response = await axios.get(searchUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      },
+      timeout: 10000
+    });
 
-            for (const item of chordResults) {
-              if (results.length >= 10) break;
-              results.push({
-                title: item.song_name || query,
-                artist: item.artist_name || 'Unknown Artist',
-                sourceUrl: item.tab_url,
-                isManual: false,
-              });
-            }
-          }
-        }
-      } catch (err) {
-        console.error('English search scrape error:', err.message);
+    const $ = cheerio.load(response.data);
+    const results = [];
+
+    // Parse search results
+    $('.search_result').each((i, element) => {
+      if (i >= 10) return false; // Limit to 10 results
+      
+      const $el = $(element);
+      const $link = $el.find('a').first();
+      const title = $link.text().trim();
+      const url = $link.attr('href');
+      
+      if (title && url) {
+        // Extract artist from title (usually in format "Artist - Song")
+        const parts = title.split(' - ');
+        const artist = parts.length > 1 ? parts[0] : 'Unknown';
+        const songTitle = parts.length > 1 ? parts.slice(1).join(' - ') : title;
+        
+        results.push({
+          title: songTitle,
+          artist,
+          url: url.startsWith('http') ? url : `https://amdm.ru${url}`,
+          type: 'Chords',
+          source: 'AMDM.ru'
+        });
       }
+    });
 
-      // Fallback to manual links if scraping didn't yield results
-      if (results.length === 0) {
-        results.push({
-          title: query,
-          artist: 'Search on Ultimate-Guitar',
-          sourceUrl: `https://www.ultimate-guitar.com/search.php?search_type=title&value=${encodeURIComponent(query)}`,
-          isManual: true,
-        });
-        results.push({
-          title: query,
-          artist: 'Search on Chordify',
-          sourceUrl: `https://chordify.net/search/${encodeURIComponent(query)}`,
-          isManual: true,
-        });
+    return results;
+  } catch (error) {
+    console.error('AMDM.ru scraping error:', error.message);
+    return [];
+  }
+}
+
+// Helper function to extract chord content from Ultimate Guitar
+async function extractUGChords(url) {
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      },
+      timeout: 15000
+    });
+
+    const $ = cheerio.load(response.data);
+    
+    // Try to find chord content in various possible containers
+    let chordContent = '';
+    
+    // Method 1: Look for pre-formatted chord content
+    const preContent = $('pre').text().trim();
+    if (preContent && preContent.length > 50) {
+      chordContent = preContent;
+    }
+    
+    // Method 2: Look for chord content in specific UG containers
+    if (!chordContent) {
+      const ugContent = $('.js-tab-content pre, .js-tab-content code, [data-name="tab-content"] pre').text().trim();
+      if (ugContent && ugContent.length > 50) {
+        chordContent = ugContent;
       }
     }
-
-    res.json(results);
+    
+    // Method 3: Extract from script tags (UG sometimes embeds chord data in JS)
+    if (!chordContent) {
+      $('script').each((i, script) => {
+        const scriptContent = $(script).html();
+        if (scriptContent && scriptContent.includes('tab_view_type') && scriptContent.includes('content')) {
+          try {
+            // Try to extract chord content from JS data
+            const match = scriptContent.match(/"content":"([^"]+)"/);
+            if (match && match[1]) {
+              chordContent = match[1].replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\/g, '');
+            }
+          } catch (e) {
+            // Continue if parsing fails
+          }
+        }
+      });
+    }
+    
+    return chordContent || 'Could not extract chord content from this page.';
   } catch (error) {
-    console.error('Search error:', error);
-    res.status(500).json({ error: 'Search failed' });
+    console.error('Error extracting UG chords:', error.message);
+    return 'Error loading chord content.';
+  }
+}
+
+// Helper function to extract chord content from AMDM.ru
+async function extractAmdmChords(url) {
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      },
+      timeout: 15000
+    });
+
+    const $ = cheerio.load(response.data);
+    
+    // AMDM.ru typically stores chords in pre tags or specific containers
+    let chordContent = '';
+    
+    // Method 1: Look for pre-formatted content
+    const preContent = $('pre').text().trim();
+    if (preContent && preContent.length > 50) {
+      chordContent = preContent;
+    }
+    
+    // Method 2: Look for chord content in specific containers
+    if (!chordContent) {
+      const contentDiv = $('.song_text, .chord_text, .song-text').text().trim();
+      if (contentDiv && contentDiv.length > 50) {
+        chordContent = contentDiv;
+      }
+    }
+    
+    return chordContent || 'Could not extract chord content from this page.';
+  } catch (error) {
+    console.error('Error extracting AMDM chords:', error.message);
+    return 'Error loading chord content.';
+  }
+}
+
+// API Routes
+
+// Search for chords
+app.get('/api/chords', async (req, res) => {
+  try {
+    const { q: query } = req.query;
+    
+    if (!query) {
+      return res.status(400).json({ error: 'Query parameter is required' });
+    }
+
+    let results = [];
+
+    if (hasCyrillic(query)) {
+      // Search Russian sites for Cyrillic queries
+      results = await scrapeAmdmRu(query);
+    } else {
+      // Search Ultimate Guitar for English queries
+      results = await scrapeUltimateGuitar(query);
+    }
+
+    // If no results found, provide fallback links
+    if (results.length === 0) {
+      results = [
+        {
+          title: `Search "${query}" on Ultimate Guitar`,
+          artist: 'External Link',
+          url: `https://www.ultimate-guitar.com/search.php?search_type=title&value=${encodeURIComponent(query)}`,
+          type: 'Search',
+          source: 'Ultimate Guitar'
+        },
+        {
+          title: `Search "${query}" on Chordify`,
+          artist: 'External Link',
+          url: `https://chordify.net/search/${encodeURIComponent(query)}`,
+          type: 'Search',
+          source: 'Chordify'
+        }
+      ];
+    }
+
+    res.json({ results });
+  } catch (error) {
+    console.error('Chord search error:', error);
+    res.status(500).json({ error: 'Failed to search for chords' });
   }
 });
 
-// Fetch chord content from a URL (proxy)
-app.get('/api/chords', async (req, res) => {
-  const url = req.query.url;
-  if (!url) return res.status(400).json({ error: 'URL parameter is required' });
-
+// Extract chord content from URL
+app.post('/api/extract-chords', async (req, res) => {
   try {
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-    const response = await fetch(proxyUrl);
-    const html = await response.text();
+    const { url } = req.body;
+    
+    if (!url) {
+      return res.status(400).json({ error: 'URL is required' });
+    }
 
-    // Extract chord content - look for common chord containers
     let chordContent = '';
-
-    // Try amdm.ru format
-    const preMatch = html.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
-    if (preMatch) {
-      chordContent = preMatch[1]
-        .replace(/<[^>]+>/g, '')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&amp;/g, '&')
-        .replace(/&quot;/g, '"');
+    
+    if (url.includes('ultimate-guitar.com')) {
+      chordContent = await extractUGChords(url);
+    } else if (url.includes('amdm.ru')) {
+      chordContent = await extractAmdmChords(url);
+    } else {
+      chordContent = 'Chord extraction not supported for this site.';
     }
 
-    if (!chordContent) {
-      const chordTextMatch = html.match(/class="[^"]*chord[_-]?text[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
-      if (chordTextMatch) {
-        chordContent = chordTextMatch[1].replace(/<[^>]+>/g, '').trim();
-      }
-    }
-
-    if (!chordContent) {
-      const songTextMatch = html.match(/class="[^"]*song[_-]?text[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
-      if (songTextMatch) {
-        chordContent = songTextMatch[1].replace(/<[^>]+>/g, '').trim();
-      }
-    }
-
-    // Try Ultimate Guitar format (JSON embedded in data-content attribute)
-    if (!chordContent) {
-      const storeMatch = html.match(/class="js-store"\s+data-content="([^"]+)"/);
-      if (storeMatch) {
-        try {
-          const jsonStr = storeMatch[1]
-            .replace(/&quot;/g, '"')
-            .replace(/&amp;/g, '&')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/&#039;/g, "'");
-          const storeData = JSON.parse(jsonStr);
-          const content = storeData?.store?.page?.data?.tab_view?.wiki_tab?.content;
-          if (content) {
-            chordContent = content
-              .replace(/\[ch\](.*?)\[\/ch\]/g, '$1')
-              .replace(/\[tab\]/g, '')
-              .replace(/\[\/tab\]/g, '')
-              .replace(/\r\n/g, '\n')
-              .trim();
-          }
-        } catch (e) {
-          // JSON parse failed, continue
-        }
-      }
-    }
-
-    res.json({ chordContent: chordContent || null });
+    res.json({ chord_content: chordContent });
   } catch (error) {
-    console.error('Chord fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch chords' });
+    console.error('Chord extraction error:', error);
+    res.status(500).json({ error: 'Failed to extract chord content' });
   }
 });
 
 // Get all saved songs
 app.get('/api/songs', (req, res) => {
-  const { q } = req.query;
-  const songs = q ? db.searchSongs(q) : db.getAllSongs();
-  res.json(songs);
+  try {
+    const songs = songOperations.getAll();
+    res.json({ songs });
+  } catch (error) {
+    console.error('Error fetching songs:', error);
+    res.status(500).json({ error: 'Failed to fetch songs' });
+  }
 });
 
-// Get a single song by ID
+// Get song by ID
 app.get('/api/songs/:id', (req, res) => {
-  const song = db.getSongById(req.params.id);
-  if (!song) return res.status(404).json({ error: 'Song not found' });
-  res.json(song);
+  try {
+    const song = songOperations.getById(req.params.id);
+    if (!song) {
+      return res.status(404).json({ error: 'Song not found' });
+    }
+    res.json({ song });
+  } catch (error) {
+    console.error('Error fetching song:', error);
+    res.status(500).json({ error: 'Failed to fetch song' });
+  }
 });
 
 // Save a new song
 app.post('/api/songs', (req, res) => {
-  const { title, artist, sourceUrl, chordContent, notes } = req.body;
-  if (!title) return res.status(400).json({ error: 'Title is required' });
+  try {
+    const { title, artist, chord_content, source_url, personal_notes } = req.body;
+    
+    if (!title || !artist || !chord_content) {
+      return res.status(400).json({ error: 'Title, artist, and chord content are required' });
+    }
 
-  const song = db.createSong({ title, artist, sourceUrl, chordContent, notes });
-  res.status(201).json(song);
+    const result = songOperations.create({
+      title,
+      artist,
+      chord_content,
+      source_url,
+      personal_notes
+    });
+
+    res.json({ 
+      message: 'Song saved successfully',
+      id: result.id,
+      share_id: result.share_id
+    });
+  } catch (error) {
+    console.error('Error saving song:', error);
+    res.status(500).json({ error: 'Failed to save song' });
+  }
 });
 
 // Update a song
 app.put('/api/songs/:id', (req, res) => {
-  const existing = db.getSongById(req.params.id);
-  if (!existing) return res.status(404).json({ error: 'Song not found' });
+  try {
+    const { title, artist, chord_content, source_url, personal_notes } = req.body;
+    
+    if (!title || !artist || !chord_content) {
+      return res.status(400).json({ error: 'Title, artist, and chord content are required' });
+    }
 
-  const { title, artist, chordContent, notes } = req.body;
-  const updated = db.updateSong(req.params.id, { title, artist, chordContent, notes });
-  res.json(updated);
+    const success = songOperations.update(req.params.id, {
+      title,
+      artist,
+      chord_content,
+      source_url,
+      personal_notes
+    });
+
+    if (!success) {
+      return res.status(404).json({ error: 'Song not found' });
+    }
+
+    res.json({ message: 'Song updated successfully' });
+  } catch (error) {
+    console.error('Error updating song:', error);
+    res.status(500).json({ error: 'Failed to update song' });
+  }
 });
 
 // Delete a song
 app.delete('/api/songs/:id', (req, res) => {
-  const existing = db.getSongById(req.params.id);
-  if (!existing) return res.status(404).json({ error: 'Song not found' });
+  try {
+    const success = songOperations.delete(req.params.id);
+    
+    if (!success) {
+      return res.status(404).json({ error: 'Song not found' });
+    }
 
-  db.deleteSong(req.params.id);
-  res.json({ success: true });
+    res.json({ message: 'Song deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting song:', error);
+    res.status(500).json({ error: 'Failed to delete song' });
+  }
 });
 
-// Get shared song by share ID
-app.get('/api/share/:shareId', (req, res) => {
-  const song = db.getSongByShareId(req.params.shareId);
-  if (!song) return res.status(404).json({ error: 'Shared song not found' });
-  res.json(song);
-});
-
-// Serve the shared song page (SPA fallback)
+// Share song by share ID
 app.get('/share/:shareId', (req, res) => {
+  try {
+    const song = songOperations.getByShareId(req.params.shareId);
+    
+    if (!song) {
+      return res.status(404).send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Song Not Found</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+        </head>
+        <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+          <h1>Song Not Found</h1>
+          <p>The shared song could not be found.</p>
+          <a href="/">Go to Chord Finder</a>
+        </body>
+        </html>
+      `);
+    }
+
+    // Return a simple HTML page with the song
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${song.title} - ${song.artist}</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+          .song-header { border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; }
+          .chord-content { white-space: pre-wrap; font-family: monospace; background: #f5f5f5; padding: 20px; border-radius: 5px; }
+          .notes { background: #fff3cd; padding: 15px; border-radius: 5px; margin-top: 20px; }
+          .back-link { display: inline-block; margin-top: 20px; color: #007bff; text-decoration: none; }
+        </style>
+      </head>
+      <body>
+        <div class="song-header">
+          <h1>${song.title}</h1>
+          <h2>by ${song.artist}</h2>
+          ${song.source_url ? `<p><a href="${song.source_url}" target="_blank">Original Source</a></p>` : ''}
+        </div>
+        <div class="chord-content">${song.chord_content}</div>
+        ${song.personal_notes ? `<div class="notes"><strong>Notes:</strong><br>${song.personal_notes}</div>` : ''}
+        <a href="/" class="back-link">← Back to Chord Finder</a>
+      </body>
+      </html>
+    `);
+  } catch (error) {
+    console.error('Error sharing song:', error);
+    res.status(500).send('Error loading shared song');
+  }
+});
+
+// Search saved songs
+app.get('/api/search', (req, res) => {
+  try {
+    const { q: query } = req.query;
+    
+    if (!query) {
+      return res.status(400).json({ error: 'Query parameter is required' });
+    }
+
+    const songs = songOperations.search(query);
+    res.json({ songs });
+  } catch (error) {
+    console.error('Error searching songs:', error);
+    res.status(500).json({ error: 'Failed to search songs' });
+  }
+});
+
+// Serve the main application
+app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// SPA fallback
-app.get('/{*path}', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
+// Start server
 app.listen(PORT, () => {
-  console.log(`Chord Finder running at http://localhost:${PORT}`);
+  console.log(`Chord Finder server running on port ${PORT}`);
+  console.log(`Visit http://localhost:${PORT} to use the application`);
 });
 
-process.on('SIGINT', () => {
-  db.close();
-  process.exit(0);
-});
+module.exports = app;

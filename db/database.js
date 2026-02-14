@@ -1,105 +1,124 @@
 const Database = require('better-sqlite3');
-const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const path = require('path');
 
-const DB_PATH = path.join(__dirname, 'chords.db');
+// Create database connection
+const dbPath = path.join(__dirname, 'songs.db');
+const db = new Database(dbPath);
 
-let db;
+// Enable foreign keys
+db.pragma('foreign_keys = ON');
 
-function getDb() {
-  if (!db) {
-    db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
-    initSchema();
+// Create songs table
+const createSongsTable = `
+  CREATE TABLE IF NOT EXISTS songs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    share_id TEXT UNIQUE NOT NULL,
+    title TEXT NOT NULL,
+    artist TEXT NOT NULL,
+    chord_content TEXT NOT NULL,
+    source_url TEXT,
+    personal_notes TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`;
+
+// Initialize database
+function initDatabase() {
+  try {
+    db.exec(createSongsTable);
+    console.log('Database initialized successfully');
+  } catch (error) {
+    console.error('Error initializing database:', error);
+    throw error;
   }
-  return db;
 }
 
-function initSchema() {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS songs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      share_id TEXT UNIQUE NOT NULL,
-      title TEXT NOT NULL,
-      artist TEXT NOT NULL DEFAULT 'Unknown Artist',
-      source_url TEXT,
-      chord_content TEXT,
-      notes TEXT DEFAULT '',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+// Song operations
+const songOperations = {
+  // Create a new song
+  create: (songData) => {
+    const shareId = uuidv4().substring(0, 8);
+    const stmt = db.prepare(`
+      INSERT INTO songs (share_id, title, artist, chord_content, source_url, personal_notes)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    
+    const result = stmt.run(
+      shareId,
+      songData.title,
+      songData.artist,
+      songData.chord_content,
+      songData.source_url || null,
+      songData.personal_notes || ''
     );
+    
+    return { id: result.lastInsertRowid, share_id: shareId };
+  },
 
-    CREATE INDEX IF NOT EXISTS idx_songs_share_id ON songs(share_id);
-    CREATE INDEX IF NOT EXISTS idx_songs_title ON songs(title);
-  `);
-}
+  // Get all songs
+  getAll: () => {
+    const stmt = db.prepare('SELECT * FROM songs ORDER BY updated_at DESC');
+    return stmt.all();
+  },
 
-function createSong({ title, artist, sourceUrl, chordContent, notes }) {
-  const shareId = uuidv4().slice(0, 8);
-  const stmt = getDb().prepare(`
-    INSERT INTO songs (share_id, title, artist, source_url, chord_content, notes)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
-  const result = stmt.run(shareId, title, artist || 'Unknown Artist', sourceUrl || '', chordContent || '', notes || '');
-  return getSongById(result.lastInsertRowid);
-}
+  // Get song by ID
+  getById: (id) => {
+    const stmt = db.prepare('SELECT * FROM songs WHERE id = ?');
+    return stmt.get(id);
+  },
 
-function getSongById(id) {
-  return getDb().prepare('SELECT * FROM songs WHERE id = ?').get(id);
-}
+  // Get song by share ID
+  getByShareId: (shareId) => {
+    const stmt = db.prepare('SELECT * FROM songs WHERE share_id = ?');
+    return stmt.get(shareId);
+  },
 
-function getSongByShareId(shareId) {
-  return getDb().prepare('SELECT * FROM songs WHERE share_id = ?').get(shareId);
-}
+  // Update song
+  update: (id, songData) => {
+    const stmt = db.prepare(`
+      UPDATE songs 
+      SET title = ?, artist = ?, chord_content = ?, source_url = ?, 
+          personal_notes = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+    
+    const result = stmt.run(
+      songData.title,
+      songData.artist,
+      songData.chord_content,
+      songData.source_url || null,
+      songData.personal_notes || '',
+      id
+    );
+    
+    return result.changes > 0;
+  },
 
-function getAllSongs() {
-  return getDb().prepare('SELECT * FROM songs ORDER BY updated_at DESC').all();
-}
+  // Delete song
+  delete: (id) => {
+    const stmt = db.prepare('DELETE FROM songs WHERE id = ?');
+    const result = stmt.run(id);
+    return result.changes > 0;
+  },
 
-function updateSong(id, { title, artist, chordContent, notes }) {
-  const fields = [];
-  const values = [];
-
-  if (title !== undefined) { fields.push('title = ?'); values.push(title); }
-  if (artist !== undefined) { fields.push('artist = ?'); values.push(artist); }
-  if (chordContent !== undefined) { fields.push('chord_content = ?'); values.push(chordContent); }
-  if (notes !== undefined) { fields.push('notes = ?'); values.push(notes); }
-
-  if (fields.length === 0) return getSongById(id);
-
-  fields.push('updated_at = CURRENT_TIMESTAMP');
-  values.push(id);
-
-  getDb().prepare(`UPDATE songs SET ${fields.join(', ')} WHERE id = ?`).run(...values);
-  return getSongById(id);
-}
-
-function deleteSong(id) {
-  return getDb().prepare('DELETE FROM songs WHERE id = ?').run(id);
-}
-
-function searchSongs(query) {
-  return getDb().prepare(
-    'SELECT * FROM songs WHERE title LIKE ? OR artist LIKE ? ORDER BY updated_at DESC'
-  ).all(`%${query}%`, `%${query}%`);
-}
-
-function close() {
-  if (db) {
-    db.close();
-    db = null;
+  // Search songs
+  search: (query) => {
+    const stmt = db.prepare(`
+      SELECT * FROM songs 
+      WHERE title LIKE ? OR artist LIKE ? OR chord_content LIKE ?
+      ORDER BY updated_at DESC
+    `);
+    const searchTerm = `%${query}%`;
+    return stmt.all(searchTerm, searchTerm, searchTerm);
   }
-}
+};
+
+// Initialize database on module load
+initDatabase();
 
 module.exports = {
-  getDb,
-  createSong,
-  getSongById,
-  getSongByShareId,
-  getAllSongs,
-  updateSong,
-  deleteSong,
-  searchSongs,
-  close,
+  db,
+  songOperations
 };
